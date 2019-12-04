@@ -576,6 +576,9 @@ class Annealer(ADmin):
         # get indices of measured components of f
         self.Lidx = Lidx
         self.L = len(Lidx)
+        
+        # set the discretization
+        exec 'self.disc = self.disc_%s'%(disc,)
 
         # Store optimization bounds. Will only be used if the chosen
         # optimization routine supports it.
@@ -595,10 +598,10 @@ class Annealer(ADmin):
             else:
                 # parameters are time-dependent
                 if self.disc.im_func.__name__ in ["disc_euler", "disc_forwardmap"]:
-                    nmax = N_model - 1
+                    nmax = self.N_model - 1
                 else:
-                    nmax = N_model
-                for n in xrange(self.nmax):
+                    nmax = self.N_model
+                for n in xrange(nmax):
                     for i in xrange(self.NPest):
                         self.bounds.append(param_b[i])
         else:
@@ -659,9 +662,6 @@ class Annealer(ADmin):
             # Assumption: user has passed a function pointer
             self.A = action
 
-        # set the discretization
-        exec 'self.disc = self.disc_%s'%(disc,)
-
         # array to store minimizing paths
         if P0.ndim == 1:
             self.minpaths = np.zeros((self.Nbeta, self.N_model*self.D + self.NP), dtype=np.float64)
@@ -689,7 +689,6 @@ class Annealer(ADmin):
             XP0 = np.append(X0.flatten(), P0)
         else:
             XP0 = np.append(X0.flatten(), P0.flatten())
-
         self.minpaths[0] = XP0
 
         # array to store optimization results

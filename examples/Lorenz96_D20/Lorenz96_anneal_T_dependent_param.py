@@ -9,7 +9,7 @@ This scripts illustrates the use of time-dependent parameters
 """
 
 import numpy as np
-import varanneal
+from varanneal import va_ode
 import sys, time
 
 # Define the model

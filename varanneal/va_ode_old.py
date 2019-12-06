@@ -166,10 +166,13 @@ class Annealer(ADmin):
         if self.NPest == 0:
             x = np.reshape(XP, (self.N_model, self.D))
             p = self.P
+        elif self.NPest == self.NP:
+            x = np.reshape(XP[:self.N_model*self.D], (self.N_model, self.D))
+            p = XP[self.N_model*self.D:]
         else:
             x = np.reshape(XP[:self.N_model*self.D], (self.N_model, self.D))
             p = np.array(self.P, dtype=XP.dtype)
-            p[self.Pestidx] = XP[self.N_model*self.D:][self.Pestidx]
+            p[self.P12_idxs] = XP[self.N_model*self.D:]
         
         # Start calculating the model error.
         # First compute time series of error terms.
@@ -344,16 +347,21 @@ class Annealer(ADmin):
         """
         Time discretization for the action using the trapezoid rule.
         """
-        repeat_idxs = np.ones(self.NP_flat)
-        repeat_idxs[self.Pfixidx] = self.NPdynmax
-        p_expand = np.repeat(p, repeat_idxs.astype(int))
-        p_arr = np.reshape(p_expand, (-1, self.NP), order='F')
+        ## TODO
         if self.stim is None:
-            pn = p_arr[:-1]
-            pnp1 = p_arr[1:]
+            if self.P.ndim == 1:
+                pn = p
+                pnp1 = p
+            else:
+                pn = p[:-1]
+                pnp1 = p[1:]
         else:
-            pn = (p_arr[:-1], self.stim[:-1])
-            pnp1 = (p_arr[1:], self.stim[1:])
+            if self.P.ndim == 1:
+                pn = (p, self.stim[:-1])
+                pnp1 = (p, self.stim[1:])
+            else:
+                pn = (p[:-1], self.stim[:-1])
+                pnp1 = (p[1:], self.stim[1:])
 
         fn = self.f(self.t_model[:-1], x[:-1], pn)
         fnp1 = self.f(self.t_model[1:], x[1:], pnp1)
@@ -390,27 +398,23 @@ class Annealer(ADmin):
         in between.
         """
         
-		# repeat static params to all timepoints, concatenate with time-dep params
-        # p_arr has shape (timepoints, number of static + dyn params)
-        ## TODO
-        pfix = p[:self.NPfix]
-        pdyn = p[self.NPfix:]
-        pfix_arr = np.reshape(np.repeat(pfix, self.NPdynmax), 
-		                     (-1, self.NPfix), order='F')
-        if self.NPdyn > 0:
-            pdyn_arr = np.reshape(pdyn, (-1, self.NPdyn))
-            p_arr = np.vstack((pfix_arr.T, pdyn_arr.T)).T
+        p1 = p[:self.NP1]
+        p2 = p[self.NP1:]
+        p1_arr = np.reshape(np.repeat(p1, self.N_model), (-1, self.NP1), order='F')
+        if self.NP2 > 0:
+            p2_arr = np.reshape(p2, (-1, self.NP2))
+            p12 = np.vstack((p1_arr.T, p2_arr.T)).T
         else:
-            p_arr = pfix_arr
+            p12 = p1_arr
         
       	if self.stim is None:
-            pn = p_arr[:-2:2]
-            pmid = p_arr[1:-1:2]
-            pnp1 = p_arr[2::2]
+            pn = p12[:-2:2]
+            pmid = p12[1:-1:2]
+            pnp1 = p12[2::2]
         else:
-            pn = (p_arr[:-2:2], self.stim[:-2:2])
-            pmid = (p_arr[1:-1:2], self.stim[1:-1:2])
-            pnp1 = (p_arr[2::2], self.stim[2::2])
+            pn = (p12[:-2:2], self.stim[:-2:2])
+            pmid = (p12[1:-1:2], self.stim[1:-1:2])
+            pnp1 = (p12[2::2], self.stim[2::2])
 
         fn = self.f(self.t_model[:-2:2], x[:-2:2], pn)
         fmid = self.f(self.t_model[1:-1:2], x[1:-1:2], pmid)
@@ -442,7 +446,7 @@ class Annealer(ADmin):
     ############################################################################
     # Annealing functions
     ############################################################################
-    def anneal(self, X0, P0, alpha, beta_array, RM, RF0, Lidx, Pidx, Uidx, 
+    def anneal(self, X0, P0, U0, alpha, beta_array, RM, RF0, Lidx, Pidx, Uidx, 
                dt_model=None,
                init_to_data=True, action='A_gaussian', disc='trapezoid', 
                method='L-BFGS-B', bounds=None, opt_args=None, adolcID=0,
@@ -453,7 +457,7 @@ class Annealer(ADmin):
         """
         # Initialize the annealing procedure, if not already done.
         if self.annealing_initialized == False:
-            self.anneal_init(X0, P0, alpha, beta_array, RM, RF0, Lidx, Pidx, 
+            self.anneal_init(X0, P0, U0, alpha, beta_array, RM, RF0, Lidx, Pidx, 
                              Uidx, dt_model,
                              init_to_data, action, disc, method, bounds,
                              opt_args, adolcID)
@@ -516,7 +520,7 @@ class Annealer(ADmin):
                 self.save_action_errors(track_action_errors['filename'], cmpt, dtype, fmt)
             
 
-    def anneal_init(self, X0, P0, alpha, beta_array, RM, RF0, Lidx, Pidx, Uidx, 
+    def anneal_init(self, X0, P0, U0, alpha, beta_array, RM, RF0, Lidx, Pidx, Uidx, 
                     dt_model=None, init_to_data=True, action='A_gaussian', 
                     disc='trapezoid', method='L-BFGS-B', bounds=None, 
                     opt_args=None, adolcID=0):
@@ -549,88 +553,72 @@ class Annealer(ADmin):
         # get optimization extra arguments
         self.opt_args = opt_args
 
-        # set the discretization scheme and number of timepoints for t-dependent params
+        # set the discretization scheme and number of points for t-dependent params
         exec 'self.disc = self.disc_%s'%(disc,)
         if self.disc.im_func.__name__ in ["disc_euler", "disc_forwardmap"]:
-            self.NPdynmax = self.N_model - 1
+            self.P2Nmax = self.N_model - 1
         else:
-            self.NPdynmax = self.N_model
+            self.P2Nmax = self.N_model
 
-        # set up static and time-dep parameters
-        assert len(np.intersect1d(Uidx, Pidx)) == 0, "Pidx and Uidx must be distinct"
-        assert max(np.hstack((Uidx, Pidx))) < len(P0), "P0 has length %s, but "\
-            "Pidx or Uidx contains indices greater than this" % len(P0)
-
-        # Add bounds on states. Will only be used if optimization routine
-        # supports it.
-        if bounds is not None:
-            self.bounds = []
-            state_b = bounds[:self.D]
-            for n in xrange(self.N_model):
-                for i in xrange(self.D):
-                    self.bounds.append(state_b[i])
-            param_b = bounds[self.D:]
+        # set up statuc and time-dep parameters
+        ## TODO change this to just P0, not U0
+        if len(P0) > 0:
+            self.NP1 = len(P0)
         else:
-            self.bounds = None
-        
-        # Aggregate parameters: initial values, measured indices, and bounds, for
-        # both static (Pfix) and time-dependent (Pdyn) parameters
-        
-        # TODO CLEAN this up
-        self.P = []
-        self.Pfixidx = []
-        self.Pdynidx = []
-        self.Pfixestidx = []
-        self.Pdynestidx = []
-        self.Pestidx = []
-        cumidx = 0
-        boundsidx = 0
-        for i, P in enumerate(P0):
-            assert (len(P) == 1) or (len(P) == self.NPdynmax),\
-              'P0 entries must be length 1 or # of timepoints (time-dep); for '\
-              'euler or forwardmap use timepoints = N_model - 1, '\
-              'otherwise use N_model'
-            if len(P) == 1:
-                # parameter is static
-                assert i not in Uidx, "[%s] in Uidx but initalized as static" % i
-                self.Pfixidx.append(cumidx)
-                if i in Pidx:
-                    self.Pestidx.append(cumidx)
-#                    self.Pfixestidx.append(cumidx)
-                    if bounds is not None:
-                        self.bounds.append(param_b[boundsidx])
-                        boundsidx  += 1
-                cumidx += 1
-            elif len(P) == self.NPdynmax:
-                # parameter is dyanmic
-                assert i not in Pidx, "[%s] in Pidx but initalized as time-dep" % i
-                self.Pdynidx.extend(range(cumidx, cumidx + self.NPdynmax))
-                if i in Uidx:
-                    self.Pestidx.extend(range(cumidx, cumidx + self.NPdynmax))
-#                    self.Pdynestidx.extend(range(cumidx, cumidx + self.NPdynmax))
-                    if bounds is not None:
-                        self.bounds.extend([param_b[boundsidx]]*self.NPdynmax)
-                        boundsidx += 1
-                cumidx += self.NPdynmax
-            self.P.extend(P.tolist())
-                 
-        # Numbers of unique parameters (all and to be estimated)
-        self.NP = len(P0)
-        self.NPestfix = len(Pidx)
-        self.NPestdyn = len(Uidx)
-        self.NPest = self.NPestfix + self.NPestdyn
-        # Parameters expanded out in timepoints if non-static
-        #self.Pfixidx = np.array(self.Pfixidx)
-        #self.Pdynidx = np.array(self.Pdynidx)
-        self.P = np.array(self.P)
+            self.NP1 = 0
+        if len(U0) > 0:
+            self.NP2 = U0.shape[1]
+            self.P = np.hstack((P0, U0.flatten()))
+        else:
+            self.NP2 = 0
+            self.P = P0
+        # number of unique parameters (irrespective of timepoints)
+        self.NP = self.NP1 + self.NP2
+        # number of total parameters, where time-dep parameters are expanded out
         self.NP_flat = len(self.P)
-        # Parameters to be estimated
-#        self.Pestidx = np.hstack((self.Pfixestidx, self.Pdynestidx)).astype(int)
-        self.Pestidx = np.array(self.Pestidx)
-        self.NPest_flat = len(self.Pestidx)
+        
+        # get indices of parameters to be estimated by annealing
+        self.P1idx = Pidx
+        self.P2idx = Uidx
+        self.NP1est = len(Pidx)
+        self.NP2est = len(Uidx)
+        self.NPest = self.NP1est + self.NP2est
+        
+        # indices all parameters to be estimated (length <= self.NP_flat)
+        self.P12_idxs = self.P1idx
+        for iP2 in self.P2idx:
+            self.P12_idxs.extend(np.arange(self.P2Nmax*(iP2 - self.NP1),
+                           self.P2Nmax*(iP2 - self.NP1 + 1)) + self.NP1)
+        self.NPest_flat = len(self.P12_idxs)
+        
         # get indices of measured components of f
         self.Lidx = Lidx
         self.L = len(Lidx)
+        
+        # Store optimization bounds. Will only be used if the chosen
+        # optimization routine supports it.
+        if bounds is not None:
+            self.bounds = []
+            state_b = bounds[:self.D]
+            param_b = bounds[self.D:]
+            
+            # set bounds on states for all N time points
+            for n in xrange(self.N_model):
+                for i in xrange(self.D):
+                    self.bounds.append(state_b[i])
+            # set bounds on static params
+            for i in xrange(self.NP1est):
+                self.bounds.append(param_b[i])
+            # set bounds on time-dep parameters for all time points
+            if self.disc.im_func.__name__ in ["disc_euler", "disc_forwardmap"]:
+                nmax = self.N_model - 1
+            else:
+                nmax = self.N_model
+            for n in xrange(nmax):
+                for i in xrange(self.NP2est):
+                    self.bounds.append(param_b[i])
+        else:
+            self.bounds = None
         
         # Reshape RM and RF so that they span the whole time series, if they
         # are passed in as vectors or matrices. This is done because in the
@@ -688,9 +676,13 @@ class Annealer(ADmin):
             self.A = action
 
         # array to store minimizing paths
-        self.minpaths = np.zeros((self.Nbeta, self.N_model*self.D + self.NP_flat),
-		                          dtype=np.float64)
-        
+        if self.disc.im_func.__name__ in ["disc_euler", "disc_forwardmap"]:
+            nmax_p = self.N_model - 1
+        else:
+            nmax_p = self.N_model
+        self.minpaths = np.zeros((self.Nbeta, self.N_model*self.D+self.NP1 
+                                 +nmax_p*self.NP2), dtype=np.float64)
+
         # initialize observed state components to data if desired
         if init_to_data == True:
             X0[::self.merr_nskip, self.Lidx] = self.Y[:]
@@ -720,13 +712,20 @@ class Annealer(ADmin):
         """
         # minimize A using the chosen method
         if self.method in ['L-BFGS-B', 'NCG', 'TNC', 'LM']:
-            idx = (self.betaidx > 0)*(self.betaidx - 1)
+            if self.betaidx == 0:
+                idx = 0
+            else:
+                idx = self.betaidx-1
             if self.NPest == 0:
                 XP0 = np.copy(self.minpaths[idx][:self.N_model*self.D])
+            elif self.NPest == self.NP:
+                XP0 = np.copy(self.minpaths[idx])
             else:
+                # P12_idxs aggregates static params with flattened time-dep parameters
                 X0 = self.minpaths[idx][:self.N_model*self.D]
-                P0 = self.minpaths[idx][self.N_model*self.D:][self.Pestidx]
+                P0 = self.minpaths[idx][self.N_model*self.D:][self.P12_idxs]
                 XP0 = np.append(X0, P0)
+            
             if self.method == 'L-BFGS-B':
                 XPmin, Amin, exitflag = self.min_lbfgs_scipy(XP0, self.gen_xtrace())
             elif self.method == 'NCG':
@@ -742,14 +741,31 @@ class Annealer(ADmin):
             print("ERROR: Optimization routine not implemented or recognized.")
             sys.exit(1)
         
-        # update optimal parameter values if there are parameters being estimated
+        # update optimal parameter values
+        ## TODO
         if self.NPest_flat > 0:
             if isinstance(XPmin[0], adolc._adolc.adouble):
-                self.P[self.Pestidx] = np.array([XPmin[self.N_model*self.D + i].val \
-                                                 for i in self.Pestidx])
+                self.P[self.P12_idxs] = np.array([XPmin[-self.NPest_flat + i].val \
+                                                 for i in xrange(self.NPest_flat)])
             else:
-                self.P[self.Pestidx] = np.copy(XPmin[-self.NPest_flat + self.Pestidx])
-        print (self.P)      
+                self.P[self.P12_idxs] = np.copy(XPmin[-self.NPest_flat:])
+            """
+            else:
+                if self.disc.im_func.__name__ in ["disc_euler", "disc_forwardmap"]:
+                    nmax = self.N_model - 1
+                else:
+                    nmax = self.N_model
+                for n in xrange(nmax):
+                    if isinstance(XPmin[0], adolc._adolc.adouble):
+                        nidx = nmax - n - 1
+                        self.P[n, self.Pidx] = np.array([XPmin[-nidx*self.NPest + i].val \
+                                                         for i in xrange(self.NPest)])
+                    else:
+                        pi1 = nmax*self.D + n*self.NPest
+                        pi2 = nmax*self.D + (n+1)*self.NPest
+                        self.P[n, self.Pidx] = np.copy(XPmin[pi1:pi2])
+            """
+
         # store A_min and the minimizing path
         self.A_array[self.betaidx] = Amin
         self.me_array[self.betaidx] = self.me_gaussian(np.array(XPmin[:self.N_model*self.D]))
@@ -797,14 +813,30 @@ class Annealer(ADmin):
             print("WARNING: You did not estimate any parameters.  Writing fixed " \
                   + "parameter values to file anyway.")
 
-        # first write fixed parameters to array
+        # write fixed parameters to array
+        #if self.P.ndim == 1:
+        #print (self.P.shape, self.NP)
         savearray = np.resize(self.P, (self.Nbeta, self.NP_flat))
-        
-		# then overwrite values of estimated parameters 
+        #else:
+        #    if self.disc.im_func.__name__ in ["disc_euler", "disc_forwardmap"]:
+        #        savearray = np.resize(self.P, (self.Nbeta, self.N_model - 1, self.NP))
+        #    else:
+        #        savearray = np.resize(self.P, (self.Nbeta, self.N_model, self.NP))
+        # write estimated parameters to array
         if self.NPest > 0:
+            #if self.P.ndim == 1:
             est_param_array = self.minpaths[:, self.N_model*self.D:]
-            savearray[:, self.Pestidx] = est_param_array[:, self.Pestidx]
-        
+            savearray[:, self.P12_idxs] = est_param_array[:, self.P12_idxs]
+            #else:
+            #    if self.disc.im_func.__name__ in ["disc_euler", "disc_forwardmap"]:
+            #        est_param_array = np.reshape(self.minpaths[:, self.N_model*self.D:],
+            #                                     (self.Nbeta, self.N_model - 1, self.NPest))
+            #        savearray[:, :, self.Pidx] = est_param_array
+            #    else:
+            #        est_param_array = np.reshape(self.minpaths[:, self.N_model*self.D:],
+            #                                     (self.Nbeta, self.N_model, self.NPest))
+            #        savearray[:, :, self.Pidx] = est_param_array
+
         if filename.endswith('.npy'):
             np.save(filename, savearray.astype(dtype))
         else:
@@ -858,8 +890,15 @@ class Annealer(ADmin):
     # AD taping & derivatives
     ############################################################################
     def gen_xtrace(self):
+        ## TODO
         """
         Define a random state vector for the AD trace.
         """
+        #if self.P.ndim == 1:
         xtrace = np.random.rand(self.N_model*self.D + self.NPest_flat)
+        #else:
+        #    if self.disc.im_func.__name__ in ["disc_euler", "disc_forwardmap"]:
+        #        xtrace = np.random.rand(self.N_model*self.D + (self.N_model-1)*self.NPest)
+        #    else:
+        #        xtrace = np.random.rand(self.N_model*(self.D + self.NPest))
         return xtrace

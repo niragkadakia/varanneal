@@ -326,17 +326,16 @@ class Annealer(ADmin):
         """
         Euler's method for time discretization of f.
         """
-        ## TODO
+        # repeat static params to all timepoints, concatenate with time-dep params
+        # p_arr has shape (timepoints, number of static + dyn params)
+        repeat_idxs = np.ones(self.NP_flat)
+        repeat_idxs[self.Pfixidx] = self.NPdynmax
+        p_expand = np.repeat(p, repeat_idxs.astype(int))
+        p_arr = np.reshape(p_expand, (-1, self.NP), order='F')
         if self.stim is None:
-            if self.P.ndim == 1:
-                pn = p
-            else:
-                pn = p[:-1]
+            pn = p_arr[:-1]
         else:
-            if self.P.ndim == 1:
-                pn = (p, self.stim[:-1])
-            else:
-                pn = (p[:-1], self.stim[:-1])
+            pn = (p_arr[:-1], self.stim[:-1])
 
         return self.dt_model * self.f(self.t_model[:-1], x[:-1], pn)
 
@@ -344,6 +343,8 @@ class Annealer(ADmin):
         """
         Time discretization for the action using the trapezoid rule.
         """
+        # repeat static params to all timepoints, concatenate with time-dep params
+        # p_arr has shape (timepoints, number of static + dyn params)
         repeat_idxs = np.ones(self.NP_flat)
         repeat_idxs[self.Pfixidx] = self.NPdynmax
         p_expand = np.repeat(p, repeat_idxs.astype(int))
@@ -389,21 +390,13 @@ class Annealer(ADmin):
         points, and a Hermite polynomial interpolation for the odd-index points
         in between.
         """
-        
 		# repeat static params to all timepoints, concatenate with time-dep params
         # p_arr has shape (timepoints, number of static + dyn params)
-        ## TODO
-        pfix = p[:self.NPfix]
-        pdyn = p[self.NPfix:]
-        pfix_arr = np.reshape(np.repeat(pfix, self.NPdynmax), 
-		                     (-1, self.NPfix), order='F')
-        if self.NPdyn > 0:
-            pdyn_arr = np.reshape(pdyn, (-1, self.NPdyn))
-            p_arr = np.vstack((pfix_arr.T, pdyn_arr.T)).T
-        else:
-            p_arr = pfix_arr
-        
-      	if self.stim is None:
+        repeat_idxs = np.ones(self.NP_flat)
+        repeat_idxs[self.Pfixidx] = self.NPdynmax
+        p_expand = np.repeat(p, repeat_idxs.astype(int))
+        p_arr = np.reshape(p_expand, (-1, self.NP), order='F')
+        if self.stim is None:
             pn = p_arr[:-2:2]
             pmid = p_arr[1:-1:2]
             pnp1 = p_arr[2::2]
@@ -425,17 +418,16 @@ class Annealer(ADmin):
         """
         "Discretization" when f is a forward mapping, not an ODE.
         """
-        ## TODO 
+        # repeat static params to all timepoints, concatenate with time-dep params
+        # p_arr has shape (timepoints, number of static + dyn params)
+        repeat_idxs = np.ones(self.NP_flat)
+        repeat_idxs[self.Pfixidx] = self.NPdynmax
+        p_expand = np.repeat(p, repeat_idxs.astype(int))
+        p_arr = np.reshape(p_expand, (-1, self.NP), order='F')
         if self.stim is None:
-            if self.P.ndim == 1:
-                pn = p
-            else:
-                pn = p[:-1]
+            pn = p_arr[:-1]
         else:
-            if self.P.ndim == 1:
-                pn = (p, self.stim[:-1])
-            else:
-                 pn = (p[:-1], self.stim[:-1])
+            pn = (p_arr[:-1], self.stim[:-1])
 
         return self.f(self.t_model[:-1], x[:-1], pn)
 
@@ -620,12 +612,9 @@ class Annealer(ADmin):
         self.NPestdyn = len(Uidx)
         self.NPest = self.NPestfix + self.NPestdyn
         # Parameters expanded out in timepoints if non-static
-        #self.Pfixidx = np.array(self.Pfixidx)
-        #self.Pdynidx = np.array(self.Pdynidx)
         self.P = np.array(self.P)
         self.NP_flat = len(self.P)
         # Parameters to be estimated
-#        self.Pestidx = np.hstack((self.Pfixestidx, self.Pdynestidx)).astype(int)
         self.Pestidx = np.array(self.Pestidx)
         self.NPest_flat = len(self.Pestidx)
         # get indices of measured components of f

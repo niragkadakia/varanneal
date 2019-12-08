@@ -588,7 +588,6 @@ class Annealer(ADmin):
                 self.Pfixidx.append(cumidx)
                 if i in Pidx:
                     self.Pestidx.append(cumidx)
-#                    self.Pfixestidx.append(cumidx)
                     if bounds is not None:
                         self.bounds.append(param_b[boundsidx])
                         boundsidx  += 1
@@ -599,7 +598,6 @@ class Annealer(ADmin):
                 self.Pdynidx.extend(range(cumidx, cumidx + self.NPdynmax))
                 if i in Uidx:
                     self.Pestidx.extend(range(cumidx, cumidx + self.NPdynmax))
-#                    self.Pdynestidx.extend(range(cumidx, cumidx + self.NPdynmax))
                     if bounds is not None:
                         self.bounds.extend([param_b[boundsidx]]*self.NPdynmax)
                         boundsidx += 1

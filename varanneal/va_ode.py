@@ -568,7 +568,6 @@ class Annealer(ADmin):
         # Aggregate parameters: initial values, measured indices, and bounds, for
         # both static (Pfix) and time-dependent (Pdyn) parameters
         
-        # TODO CLEAN this up
         self.P = []
         self.Pfixidx = []
         self.Pdynidx = []
@@ -606,9 +605,7 @@ class Annealer(ADmin):
                  
         # Numbers of unique parameters (all and to be estimated)
         self.NP = len(P0)
-        self.NPestfix = len(Pidx)
-        self.NPestdyn = len(Uidx)
-        self.NPest = self.NPestfix + self.NPestdyn
+        self.NPest = len(Pidx) + len(Uidx)
         # Parameters expanded out in timepoints if non-static
         self.P = np.array(self.P)
         self.NP_flat = len(self.P)

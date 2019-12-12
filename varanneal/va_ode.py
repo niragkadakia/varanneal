@@ -131,7 +131,6 @@ class Annealer(ADmin):
         """
         Calculate the value of the Gaussian action.
         """
-        
         merr = self.me_gaussian(XP[:self.N_model*self.D])
         ferr = self.fe_gaussian(XP)
         return merr + ferr
@@ -169,7 +168,7 @@ class Annealer(ADmin):
         else:
             x = np.reshape(XP[:self.N_model*self.D], (self.N_model, self.D))
             p = np.array(self.P, dtype=XP.dtype)
-            p[self.Pestidx] = XP[self.N_model*self.D:][self.Pestidx]
+            p[self.Pestidx] = XP[self.N_model*self.D:]
         
         # Start calculating the model error.
         # First compute time series of error terms.
@@ -679,8 +678,8 @@ class Annealer(ADmin):
         if init_to_data == True:
             X0[::self.merr_nskip, self.Lidx] = self.Y[:]
         
-        # Flatten X0 and P0 into extended XP0 path vector. This holds 
-        # all parameters and states whether or not being estimated
+        # Flatten X0 and P0 into extended XP0 path vector. minpaths olds 
+        # all parameters and states whether or not being estimated.
         XP0 = np.append(X0.flatten(), self.P)
         self.minpaths[0] = XP0
         

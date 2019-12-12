@@ -733,7 +733,7 @@ class Annealer(ADmin):
                                                  for i in self.Pestidx])
             else:
                 self.P[self.Pestidx] = np.copy(XPmin[-self.NPest_flat + self.Pestidx])
-        print (self.P)      
+        
         # store A_min and the minimizing path
         self.A_array[self.betaidx] = Amin
         self.me_array[self.betaidx] = self.me_gaussian(np.array(XPmin[:self.N_model*self.D]))

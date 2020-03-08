@@ -234,7 +234,7 @@ class Annealer(ADmin):
 
         return ferr / (self.D * (self.N_model - 1))
 
-	def me_gaussian_adjoint(self, X):
+    def me_gaussian_adjoint(self, X):
         """
         Lagrangian error term for adjoint model / optimal control.
         """
@@ -673,7 +673,7 @@ class Annealer(ADmin):
         self.NP = len(P0)
         self.NPest = len(Pidx) + len(Uidx)
         # All parameters, with time-dependent ones expanded out
-		self.P = np.array(self.P)
+        self.P = np.array(self.P)
         self.NP_flat = len(self.P)
         # Parameters to be estimated
         self.Pestidx = np.array(self.Pestidx)

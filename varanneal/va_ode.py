@@ -135,6 +135,77 @@ class Annealer(ADmin):
         ferr = self.fe_gaussian(XP)
         return merr + ferr
 
+    def A_gaussian_quad_control(self, XP):
+        """
+        Calculate the value of the Gaussian action.
+        """
+        merr = self.me_gaussian(XP[:self.N_model*self.D])
+        ferr = self.fe_gaussian(XP)
+        cerr = self.ce_quad(XP)
+        return merr + ferr + cerr
+
+    def A_gaussian_adjoint(self, XP):
+        """
+        Calculate the value of the Gaussian action in the adjoint space
+        defined by the optimally controlled system.
+        """
+        merr = self.me_adj(XP[:self.N_model*self.D])
+        ferr = self.fe_gaussian(XP)
+        return merr + ferr
+
+    def me_adj(self, X):
+        """
+        Lagrangian error term for adjoint model / optimal control.
+        """
+        
+        xp = np.reshape(X, (self.N_model, self.D))
+        x = xp[:, :self.D/2]
+        p = xp[:, self.D/2:]
+        diff = x[::self.merr_nskip, self.Lidx] - self.Y
+        adj_term = 1 + p[::self.merr_nskip, self.Lidx]**2.0
+        
+        if type(self.RM) == np.ndarray:
+            # Contract RM with error
+            if self.RM.shape == (self.N_data, self.L):
+                merr = np.sum(self.RM * diff * diff * adj_term)
+            elif self.RM.shape == (self.N_data, self.L, self.L):
+                print ("ERROR: matrix RM not coded for adjoint action")
+                quit()
+            else:
+                print("ERROR: RM is in an invalid shape.")
+        else:
+            merr = self.RM * np.sum(diff * diff)
+
+        return merr / (self.L * self.N_data)
+    
+
+    def ce_quad(self, XP):
+       """
+       Quadratic control cost
+       """
+       if self.NPest == 0:
+          p = self.P
+          u = p[self.Pdynidx]
+       else:
+          p = np.array(self.P, dtype=XP.dtype)
+          p[self.Pestidx] = XP[self.N_model*self.D:]
+          u = p[self.Pdynidx]
+
+       # Contract control terms quadratically with RF.
+       if type(self.RF) == np.ndarray:
+           if self.RF.shape == (self.N_model - 1, self.D):
+               ferr = np.sum(self.RF * u * u) 
+           elif self.RF.shape == (self.N_model - 1, self.D, self.D):
+               ferr = np.dot(u, np.dot(self.RF, u))
+           else:
+               print("ERROR: RF is in an invalid shape. Exiting.")
+               sys.exit(1)
+
+       else:
+           ferr = self.RF * np.sum(u * u)
+
+       return ferr / (self.D * (self.N_model - 1))
+
     def me_gaussian(self, X):
         """
         Gaussian measurement error.
@@ -744,7 +815,7 @@ class Annealer(ADmin):
             self.betaidx += 1
             self.beta = self.beta_array[self.betaidx]
             self.RF = self.RF0 * self.alpha**self.beta
-
+        
         # set flags indicating that A needs to be retaped, and that we're no
         # longer at the beginning of the annealing procedure
         self.taped = False

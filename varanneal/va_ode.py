@@ -153,6 +153,20 @@ class Annealer(ADmin):
         ferr = self.fe_gaussian(XP)
         return merr + ferr
 
+	def A_least_squares(self, XP):
+        """
+        Calculate the value of least squares on the data terms
+        """
+        merr = self.me_gaussian(XP[:self.N_model*self.D])
+        return merr
+
+	def A_least_squares_constraints(self, XP):
+		"""
+        Calculate the equality constraints to be enforced in least squares.
+        """
+        ferrs = fe_equality_constraints(XP)
+		return ferrs
+
     def me_gaussian(self, X):
         """
         Gaussian measurement error.
@@ -233,6 +247,32 @@ class Annealer(ADmin):
                 ferr = self.RF * np.sum(diff * diff)
 
         return ferr / (self.D * (self.N_model - 1))
+
+	def fe_equality_constraints(self, XP):
+        """
+        Model errors to serve as equality constraints, Rf is ignored.
+        """
+        # Extract state and parameters from XP.
+        if self.NPest == 0:
+            x = np.reshape(XP, (self.N_model, self.D))
+            p = self.P
+        else:
+            x = np.reshape(XP[:self.N_model*self.D], (self.N_model, self.D))
+            p = np.array(self.P, dtype=XP.dtype)
+            p[self.Pestidx] = XP[self.N_model*self.D:]
+        
+        # Start calculating the model error.
+        # First compute time series of error terms.
+        if self.disc.im_func.__name__ == "disc_SimpsonHermite":
+            disc_vec1, disc_vec2 = self.disc(x, p)
+            diff1 = x[2::2] - x[:-2:2] - disc_vec1
+            diff2 = x[1::2] - disc_vec2
+        elif self.disc.im_func.__name__ == 'disc_forwardmap':
+            diff = x[1:] - self.disc(x, p)
+        else:
+            diff = x[1:] - x[:-1] - self.disc(x, p)
+        
+        return diff
 
     def me_gaussian_adjoint(self, X):
         """
@@ -500,6 +540,7 @@ class Annealer(ADmin):
 
         return self.f(self.t_model[:-1], x[:-1], pn)
 
+	
     ############################################################################
     # Annealing functions
     ############################################################################
@@ -507,7 +548,8 @@ class Annealer(ADmin):
                dt_model=None,
                init_to_data=True, action='A_gaussian', disc='trapezoid', 
                method='L-BFGS-B', bounds=None, opt_args=None, adolcID=0,
-               track_paths=None, track_params=None, track_action_errors=None):
+               track_paths=None, track_params=None, track_action_errors=None,
+			   enforce_model=False):
         """
         Convenience function to carry out a full annealing run over all values
         of beta in beta_array.
@@ -517,7 +559,7 @@ class Annealer(ADmin):
             self.anneal_init(X0, P0, alpha, beta_array, RM, RF0, Lidx, Pidx, 
                              Uidx, dt_model,
                              init_to_data, action, disc, method, bounds,
-                             opt_args, adolcID)
+                             opt_args, adolcID, enforce_model)
 
         # Loop through all beta values for annealing.
         for i in beta_array:
@@ -580,7 +622,7 @@ class Annealer(ADmin):
     def anneal_init(self, X0, P0, alpha, beta_array, RM, RF0, Lidx, Pidx, Uidx, 
                     dt_model=None, init_to_data=True, action='A_gaussian', 
                     disc='trapezoid', method='L-BFGS-B', bounds=None, 
-                    opt_args=None, adolcID=0):
+                    opt_args=None, adolcID=0, enforce_model=False):
         """
         Initialize the annealing procedure.
         """
@@ -736,6 +778,12 @@ class Annealer(ADmin):
         else:
             # Assumption: user has passed a function pointer
             self.A = action
+
+		# Set equality constraints if model equations are to be enforced exactly.
+		if enforce_model == True:
+			self.constraints = self.A_least_squares_constraints
+		else:
+			self.constraints = None
 
         # array to store minimizing paths
         self.minpaths = np.zeros((self.Nbeta, self.N_model*self.D + self.NP_flat),

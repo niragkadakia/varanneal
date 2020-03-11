@@ -11,6 +11,7 @@ variational annealing.
 import numpy as np
 import adolc
 import scipy.optimize as opt
+from scipy.optimize import NonlinearConstraint
 import time
 
 class ADmin(object):
@@ -48,6 +49,24 @@ class ADmin(object):
         print('Done!')
         print('Time = {0} s\n'.format(time.time()-tstart))
 
+	def tape_constraints(self, xtrace):
+        """
+        Tape the objective function.
+        """
+        print('Taping equality constraints...')
+        tstart = time.time()
+
+        adolc.trace_on(-self.adolcID)
+        # set the active independent variables
+        ax = adolc.adouble(xtrace)
+        adolc.independent(ax)
+        # set the dependent variable (or vector of dependent variables)
+        af = self.constraints(ax)
+        adolc.dependent(af)
+        adolc.trace_off()
+        print('Done!')
+        print('Time = {0} s\n'.format(time.time()-tstart))
+
     def A_taped(self, XP):
         return adolc.function(self.adolcID, XP)
     
@@ -66,6 +85,12 @@ class ADmin(object):
     def hessianA_taped(self, XP):
         return adolc.hessian(self.adolcID, XP)
 
+	def constraint_taped(self, XP):
+		return adolc.function(-self.adolcID, XP)
+
+	def grad_constraint_taped(self, XP):
+		return adolc.gradient(-self.adolcID, XP)
+
     ################################################################################
     # Minimization functions
     ################################################################################
@@ -78,12 +103,19 @@ class ADmin(object):
         """
         if self.taped == False:
             self.tape_A(xtrace)
-
+			if self.enforce_model == True:
+				self.tape_constraints(xtrace)
+				constraints = NonlinearConstraint(self.constraint_taped,
+										0, 0, jac=self.grad_constraint_taped)
+			else:
+				constraints = None
+				
         # start the optimization
         print("Beginning optimization...")
         tstart = time.time()
         res = opt.minimize(self.A_gradA_taped, XP0, method='L-BFGS-B', jac=True,
-                           options=self.opt_args, bounds=self.bounds)
+                           options=self.opt_args, bounds=self.bounds, 
+						   constraints=constraints)
         XPmin,status,Amin = res.x, res.status, res.fun
 
         print("Optimization complete!")

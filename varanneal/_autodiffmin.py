@@ -11,7 +11,6 @@ variational annealing.
 import numpy as np
 import adolc
 import scipy.optimize as opt
-from scipy.optimize import NonlinearConstraint
 import time
 
 class ADmin(object):
@@ -49,14 +48,14 @@ class ADmin(object):
         print('Done!')
         print('Time = {0} s\n'.format(time.time()-tstart))
 
-	def tape_constraints(self, xtrace):
+    def tape_constraints(self, xtrace):
         """
         Tape the objective function.
         """
         print('Taping equality constraints...')
         tstart = time.time()
 
-        adolc.trace_on(-self.adolcID)
+        adolc.trace_on(self.adolcID + 10)
         # set the active independent variables
         ax = adolc.adouble(xtrace)
         adolc.independent(ax)
@@ -85,11 +84,14 @@ class ADmin(object):
     def hessianA_taped(self, XP):
         return adolc.hessian(self.adolcID, XP)
 
-	def constraint_taped(self, XP):
-		return adolc.function(-self.adolcID, XP)
+    def constraint_taped(self, XP):
+        return adolc.function(self.adolcID + 10, XP)
 
-	def grad_constraint_taped(self, XP):
-		return adolc.gradient(-self.adolcID, XP)
+    def jac_constraint_taped(self, XP):
+        val= adolc.jacobian(self.adolcID + 10, XP)
+        print (val)
+        quit()
+        #return adolc.jacobian(self.adolcID + 10, XP)
 
     ################################################################################
     # Minimization functions
@@ -103,19 +105,45 @@ class ADmin(object):
         """
         if self.taped == False:
             self.tape_A(xtrace)
-			if self.enforce_model == True:
-				self.tape_constraints(xtrace)
-				constraints = NonlinearConstraint(self.constraint_taped,
-										0, 0, jac=self.grad_constraint_taped)
-			else:
-				constraints = None
-				
+                
         # start the optimization
         print("Beginning optimization...")
         tstart = time.time()
         res = opt.minimize(self.A_gradA_taped, XP0, method='L-BFGS-B', jac=True,
-                           options=self.opt_args, bounds=self.bounds, 
-						   constraints=constraints)
+                           options=self.opt_args, bounds=self.bounds)
+        XPmin,status,Amin = res.x, res.status, res.fun
+
+        print("Optimization complete!")
+        print("Time = {0} s".format(time.time()-tstart))
+        print("Exit flag = {0}".format(status))
+        print("Exit message: {0}".format(res.message))
+        print("Iterations = {0}".format(res.nit))
+        print("Obj. function value = {0}\n".format(Amin))
+        return XPmin, Amin, status
+
+    def min_slsqp_scipy(self, XP0, xtrace=None):
+        """
+        Minimize f starting from XP0 using SLSQP w/contraints in scipy.
+        This method supports the use of bounds. This ignores Rf.
+        Returns the minimizing state, the minimum function value, and the L-BFGS
+        termination information.
+        """
+        if self.taped == False:
+            self.tape_A(xtrace)
+            if self.constraints is not None:
+                self.tape_constraints(xtrace)
+                constraints = ({'type': 'eq', 'fun': self.constraint_taped,
+                                'jac': self.jac_constraint_taped})
+            else:
+                constraints = ({'type': 'eq', 'fun': lambda x: 0})
+        
+		# start the optimization
+        print("Beginning optimization...")
+        tstart = time.time()
+        
+        res = opt.minimize(self.A_taped, XP0, jac=self.gradA_taped, method='SLSQP',
+                           options=self.opt_args, bounds=self.bounds,
+                           constraints=constraints)
         XPmin,status,Amin = res.x, res.status, res.fun
 
         print("Optimization complete!")

@@ -153,19 +153,12 @@ class Annealer(ADmin):
         ferr = self.fe_gaussian(XP)
         return merr + ferr
 
-	def A_least_squares(self, XP):
+    def A_least_squares(self, XP):
         """
         Calculate the value of least squares on the data terms
         """
         merr = self.me_gaussian(XP[:self.N_model*self.D])
         return merr
-
-	def A_least_squares_constraints(self, XP):
-		"""
-        Calculate the equality constraints to be enforced in least squares.
-        """
-        ferrs = fe_equality_constraints(XP)
-		return ferrs
 
     def me_gaussian(self, X):
         """
@@ -248,7 +241,7 @@ class Annealer(ADmin):
 
         return ferr / (self.D * (self.N_model - 1))
 
-	def fe_equality_constraints(self, XP):
+    def fe_equality_constraints(self, XP):
         """
         Model errors to serve as equality constraints, Rf is ignored.
         """
@@ -267,6 +260,7 @@ class Annealer(ADmin):
             disc_vec1, disc_vec2 = self.disc(x, p)
             diff1 = x[2::2] - x[:-2:2] - disc_vec1
             diff2 = x[1::2] - disc_vec2
+            diff = np.vstack((diff1, diff2)).flatten() ## TODO Correct??
         elif self.disc.im_func.__name__ == 'disc_forwardmap':
             diff = x[1:] - self.disc(x, p)
         else:
@@ -300,31 +294,20 @@ class Annealer(ADmin):
         return merr / (self.L * self.N_data)
     
     def ce_quad(self, XP):
-       """
-       Quadratic control cost
-       """
-       if self.NPest == 0:
-          p = self.P
-          u = p[self.Pdynidx]
-       else:
-          p = np.array(self.P, dtype=XP.dtype)
-          p[self.Pestidx] = XP[self.N_model*self.D:]
-          u = p[self.Pdynidx]
+        """
+        Quadratic control cost
+        """
+        if self.NPest == 0:
+            p = self.P
+            u = p[self.Pdynidx]
+        else:
+           p = np.array(self.P, dtype=XP.dtype)
+           p[self.Pestidx] = XP[self.N_model*self.D:]
+           u = p[self.Pdynidx]
 
-       # Contract control terms quadratically with RF.
-       if type(self.RF) == np.ndarray:
-           if self.RF.shape == (self.N_model - 1, self.D):
-               ferr = np.sum(self.RF * u * u) 
-           elif self.RF.shape == (self.N_model - 1, self.D, self.D):
-               ferr = np.dot(u, np.dot(self.RF, u))
-           else:
-               print("ERROR: RF is in an invalid shape. Exiting.")
-               sys.exit(1)
+           ferr =  np.sum(u * u)
 
-       else:
-           ferr = self.RF * np.sum(u * u)
-
-       return ferr / (self.D * (self.N_model - 1))
+        return ferr / (self.D * (self.N_model - 1))
 
     #def vecA_gaussian(self, XP):
     #    """
@@ -499,7 +482,7 @@ class Annealer(ADmin):
         points, and a Hermite polynomial interpolation for the odd-index points
         in between.
         """
-		# repeat static params to all timepoints, concatenate with time-dep params
+        # repeat static params to all timepoints, concatenate with time-dep params
         # p_arr has shape (timepoints, number of static + dyn params)
         repeat_idxs = np.ones(self.NP_flat)
         repeat_idxs[self.Pfixidx] = self.NPdynmax
@@ -540,7 +523,7 @@ class Annealer(ADmin):
 
         return self.f(self.t_model[:-1], x[:-1], pn)
 
-	
+    
     ############################################################################
     # Annealing functions
     ############################################################################
@@ -549,7 +532,7 @@ class Annealer(ADmin):
                init_to_data=True, action='A_gaussian', disc='trapezoid', 
                method='L-BFGS-B', bounds=None, opt_args=None, adolcID=0,
                track_paths=None, track_params=None, track_action_errors=None,
-			   enforce_model=False):
+               enforce_model=False):
         """
         Convenience function to carry out a full annealing run over all values
         of beta in beta_array.
@@ -626,7 +609,7 @@ class Annealer(ADmin):
         """
         Initialize the annealing procedure.
         """
-        if method not in ('L-BFGS-B', 'NCG', 'LM', 'TNC'):
+        if method not in ('SLSQP', 'L-BFGS-B', 'NCG', 'LM', 'TNC'):
             print("ERROR: Optimization routine not recognized. Annealing not initialized.")
             return None
         else:
@@ -653,7 +636,7 @@ class Annealer(ADmin):
         self.opt_args = opt_args
 
         # set the discretization scheme and number of timepoints for t-dependent params
-        exec 'self.disc = self.disc_%s'%(disc,)
+        exec ('self.disc = self.disc_%s'%(disc,))
         if self.disc.im_func.__name__ in ["disc_euler", "disc_forwardmap"]:
             self.NPdynmax = self.N_model - 1
         else:
@@ -714,12 +697,15 @@ class Annealer(ADmin):
         # Numbers of unique parameters (all and to be estimated)
         self.NP = len(P0)
         self.NPest = len(Pidx) + len(Uidx)
+
         # All parameters, with time-dependent ones expanded out
         self.P = np.array(self.P)
         self.NP_flat = len(self.P)
+
         # Parameters to be estimated
         self.Pestidx = np.array(self.Pestidx)
         self.NPest_flat = len(self.Pestidx)
+
         # get indices of measured components of f
         self.Lidx = Lidx
         self.L = len(Lidx)
@@ -774,20 +760,20 @@ class Annealer(ADmin):
         #    # Levenberg-Marquardt requires a "vector action"
         #    self.A = self.vecA_gaussian
         if type(action) == str:
-            exec 'self.A = self.%s'%(action)
+            exec ('self.A = self.%s'%(action))
         else:
             # Assumption: user has passed a function pointer
             self.A = action
 
-		# Set equality constraints if model equations are to be enforced exactly.
-		if enforce_model == True:
-			self.constraints = self.A_least_squares_constraints
-		else:
-			self.constraints = None
+        # Set equality constraints if model equations are to be enforced exactly.
+        if enforce_model == True:
+            self.constraints = self.fe_equality_constraints
+        else:
+            self.constraints = None
 
         # array to store minimizing paths
         self.minpaths = np.zeros((self.Nbeta, self.N_model*self.D + self.NP_flat),
-		                          dtype=np.float64)
+                                  dtype=np.float64)
         
         # initialize observed state components to data if desired
         if init_to_data == True:
@@ -817,7 +803,7 @@ class Annealer(ADmin):
         step). Then, RF is increased to prepare for the next annealing step.
         """
         # minimize A using the chosen method
-        if self.method in ['L-BFGS-B', 'NCG', 'TNC', 'LM']:
+        if self.method in ['SLSQP', 'L-BFGS-B', 'NCG', 'TNC', 'LM']:
             idx = (self.betaidx > 0)*(self.betaidx - 1)
             if self.NPest == 0:
                 XP0 = np.copy(self.minpaths[idx][:self.N_model*self.D])
@@ -825,7 +811,9 @@ class Annealer(ADmin):
                 X0 = self.minpaths[idx][:self.N_model*self.D]
                 P0 = self.minpaths[idx][self.N_model*self.D:][self.Pestidx]
                 XP0 = np.append(X0, P0)
-            if self.method == 'L-BFGS-B':
+            if self.method == 'SLSQP':
+                XPmin, Amin, exitflag = self.min_slsqp_scipy(XP0, self.gen_xtrace())
+            elif self.method == 'L-BFGS-B':
                 XPmin, Amin, exitflag = self.min_lbfgs_scipy(XP0, self.gen_xtrace())
             elif self.method == 'NCG':
                 XPmin, Amin, exitflag = self.min_cg_scipy(XP0, self.gen_xtrace())
@@ -898,7 +886,7 @@ class Annealer(ADmin):
         # first write fixed parameters to array
         savearray = np.resize(self.P, (self.Nbeta, self.NP_flat))
         
-		# then overwrite values of estimated parameters 
+        # then overwrite values of estimated parameters 
         if self.NPest > 0:
             est_param_array = self.minpaths[:, self.N_model*self.D:]
             savearray[:, self.Pestidx] = est_param_array[:, self.Pestidx]

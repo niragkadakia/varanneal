@@ -431,6 +431,27 @@ class Annealer(ADmin):
 
         return self.dt_model * self.f(self.t_model[:-1], x[:-1], pn)
 
+    def disc_midpoint(self, x, p):
+        """
+        Time discretization for the action using the midpoint rule.
+        """
+        # repeat static params to all timepoints, concatenate with time-dep params
+        # p_arr has shape (timepoints, number of static + dyn params)
+        repeat_idxs = np.ones(self.NP_flat)
+        repeat_idxs[self.Pfixidx] = self.NPdynmax
+        p_expand = np.repeat(p, repeat_idxs.astype(int))
+        p_arr = np.reshape(p_expand, (-1, self.NP), order='F')
+        if self.stim is None:
+            pmid = (p_arr[:-1] + p_arr[1:]) / 2.0
+        else:
+            pmid = ((p_arr[:-1] + p_arr[1:]) / 2.0, 
+                    (self.stim[:-1] + self.stim[1:]) / 2.0)
+       
+        tmid = (self.t_model[:-1] + self.t_model[1:]) / 2.0
+        xmid = (x[:1] + x[:-1]) / 2.0
+
+        return self.dt_model * self.f(tmid, xmid, pmid)
+    
     def disc_trapezoid(self, x, p):
         """
         Time discretization for the action using the trapezoid rule.

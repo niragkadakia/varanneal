@@ -658,10 +658,7 @@ class Annealer(ADmin):
 
         # set the discretization scheme and number of timepoints for t-dependent params
         exec ('self.disc = self.disc_%s'%(disc,))
-        if self.disc.im_func.__name__ in ["disc_euler", "disc_forwardmap"]:
-            self.NPdynmax = self.N_model - 1
-        else:
-            self.NPdynmax = self.N_model
+        self.NPdynmax = self.N_model
 
         # set up static and time-dep parameters
         assert len(np.intersect1d(Uidx, Pidx)) == 0, "Pidx and Uidx must be distinct"

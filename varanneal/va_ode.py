@@ -420,10 +420,13 @@ class Annealer(ADmin):
         """
         # repeat static params to all timepoints, concatenate with time-dep params
         # p_arr has shape (timepoints, number of static + dyn params)
-        repeat_idxs = np.ones(self.NP_flat)
-        repeat_idxs[self.Pfixidx] = self.NPdynmax
-        p_expand = np.repeat(p, repeat_idxs.astype(int))
-        p_arr = np.reshape(p_expand, (-1, self.NP), order='F')
+        if (self.NP) > 0:
+            repeat_idxs = np.ones(self.NP_flat)
+            repeat_idxs[self.Pfixidx] = self.NPdynmax
+            p_expand = np.repeat(p, repeat_idxs.astype(int))
+            p_arr = np.reshape(p_expand, (-1, self.NP), order='F')
+        else:
+            p_arr = []
         if self.stim is None:
             pn = p_arr[:-1]
         else:
@@ -437,10 +440,13 @@ class Annealer(ADmin):
         """
         # repeat static params to all timepoints, concatenate with time-dep params
         # p_arr has shape (timepoints, number of static + dyn params)
-        repeat_idxs = np.ones(self.NP_flat)
-        repeat_idxs[self.Pfixidx] = self.NPdynmax
-        p_expand = np.repeat(p, repeat_idxs.astype(int))
-        p_arr = np.reshape(p_expand, (-1, self.NP), order='F')
+        if (self.NP) > 0:
+            repeat_idxs = np.ones(self.NP_flat)
+            repeat_idxs[self.Pfixidx] = self.NPdynmax
+            p_expand = np.repeat(p, repeat_idxs.astype(int))
+            p_arr = np.reshape(p_expand, (-1, self.NP), order='F')
+        else:
+            p_arr = []
         if self.stim is None:
             pmid = (p_arr[:-1] + p_arr[1:]) / 2.0
         else:
@@ -458,10 +464,13 @@ class Annealer(ADmin):
         """
         # repeat static params to all timepoints, concatenate with time-dep params
         # p_arr has shape (timepoints, number of static + dyn params)
-        repeat_idxs = np.ones(self.NP_flat)
-        repeat_idxs[self.Pfixidx] = self.NPdynmax
-        p_expand = np.repeat(p, repeat_idxs.astype(int))
-        p_arr = np.reshape(p_expand, (-1, self.NP), order='F')
+        if (self.NP) > 0:
+            repeat_idxs = np.ones(self.NP_flat)
+            repeat_idxs[self.Pfixidx] = self.NPdynmax
+            p_expand = np.repeat(p, repeat_idxs.astype(int))
+            p_arr = np.reshape(p_expand, (-1, self.NP), order='F')
+        else:
+            p_arr = []
         if self.stim is None:
             pn = p_arr[:-1]
             pnp1 = p_arr[1:]
@@ -505,10 +514,13 @@ class Annealer(ADmin):
         """
         # repeat static params to all timepoints, concatenate with time-dep params
         # p_arr has shape (timepoints, number of static + dyn params)
-        repeat_idxs = np.ones(self.NP_flat)
-        repeat_idxs[self.Pfixidx] = self.NPdynmax
-        p_expand = np.repeat(p, repeat_idxs.astype(int))
-        p_arr = np.reshape(p_expand, (-1, self.NP), order='F')
+        if (self.NP) > 0:
+            repeat_idxs = np.ones(self.NP_flat)
+            repeat_idxs[self.Pfixidx] = self.NPdynmax
+            p_expand = np.repeat(p, repeat_idxs.astype(int))
+            p_arr = np.reshape(p_expand, (-1, self.NP), order='F')
+        else:
+            p_arr = []
         if self.stim is None:
             pn = p_arr[:-2:2]
             pmid = p_arr[1:-1:2]
@@ -517,7 +529,7 @@ class Annealer(ADmin):
             pn = (p_arr[:-2:2], self.stim[:-2:2])
             pmid = (p_arr[1:-1:2], self.stim[1:-1:2])
             pnp1 = (p_arr[2::2], self.stim[2::2])
-
+        
         fn = self.f(self.t_model[:-2:2], x[:-2:2], pn)
         fmid = self.f(self.t_model[1:-1:2], x[1:-1:2], pmid)
         fnp1 = self.f(self.t_model[2::2], x[2::2], pnp1)
@@ -533,10 +545,13 @@ class Annealer(ADmin):
         """
         # repeat static params to all timepoints, concatenate with time-dep params
         # p_arr has shape (timepoints, number of static + dyn params)
-        repeat_idxs = np.ones(self.NP_flat)
-        repeat_idxs[self.Pfixidx] = self.NPdynmax
-        p_expand = np.repeat(p, repeat_idxs.astype(int))
-        p_arr = np.reshape(p_expand, (-1, self.NP), order='F')
+        if (self.NP) > 0:
+            repeat_idxs = np.ones(self.NP_flat)
+            repeat_idxs[self.Pfixidx] = self.NPdynmax
+            p_expand = np.repeat(p, repeat_idxs.astype(int))
+            p_arr = np.reshape(p_expand, (-1, self.NP), order='F')
+        else:
+            p_arr = []
         if self.stim is None:
             pn = p_arr[:-1]
         else:
@@ -662,8 +677,9 @@ class Annealer(ADmin):
 
         # set up static and time-dep parameters
         assert len(np.intersect1d(Uidx, Pidx)) == 0, "Pidx and Uidx must be distinct"
-        assert max(np.hstack((Uidx, Pidx))) < len(P0), "P0 has length %s, but "\
-            "Pidx or Uidx contains indices greater than this" % len(P0)
+        if len(Uidx)*len(Pidx) > 0:
+            assert max(np.hstack((Uidx, Pidx))) < len(P0), "P0 has length %s, but "\
+               "Pidx or Uidx contains indices greater than this" % len(P0)
 
         # Add bounds on states. Will only be used if optimization routine
         # supports it.

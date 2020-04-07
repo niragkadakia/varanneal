@@ -149,6 +149,7 @@ class Annealer(ADmin):
         Calculate the value of the Gaussian action in the adjoint space
         defined by the optimally controlled system.
         """
+        XP[:self.N_model*self.D] /= self.adj_var_scaling
         merr = self.me_gaussian_adjoint(XP[:self.N_model*self.D])
         ferr = self.fe_gaussian(XP)
         return merr + ferr
@@ -568,7 +569,7 @@ class Annealer(ADmin):
                init_to_data=True, action='A_gaussian', disc='trapezoid', 
                method='L-BFGS-B', bounds=None, opt_args=None, adolcID=0,
                track_paths=None, track_params=None, track_action_errors=None,
-               enforce_model=False):
+               enforce_model=False, adj_var_scaling=None):
         """
         Convenience function to carry out a full annealing run over all values
         of beta in beta_array.
@@ -578,7 +579,7 @@ class Annealer(ADmin):
             self.anneal_init(X0, P0, alpha, beta_array, RM, RF0, Lidx, Pidx, 
                              Uidx, dt_model,
                              init_to_data, action, disc, method, bounds,
-                             opt_args, adolcID, enforce_model)
+                             opt_args, adolcID, enforce_model, adj_var_scaling)
 
         # Loop through all beta values for annealing.
         for i in beta_array:
@@ -641,7 +642,8 @@ class Annealer(ADmin):
     def anneal_init(self, X0, P0, alpha, beta_array, RM, RF0, Lidx, Pidx, Uidx, 
                     dt_model=None, init_to_data=True, action='A_gaussian', 
                     disc='trapezoid', method='L-BFGS-B', bounds=None, 
-                    opt_args=None, adolcID=0, enforce_model=False):
+                    opt_args=None, adolcID=0, enforce_model=False, 
+                    adj_var_scaling=False):
         """
         Initialize the annealing procedure.
         """
@@ -746,10 +748,21 @@ class Annealer(ADmin):
         self.Pestidx = np.array(self.Pestidx)
         self.NPest_flat = len(self.Pestidx)
 
-        # get indices of measured components of f
+        # Get indices of measured components of f
         self.Lidx = Lidx
         self.L = len(Lidx)
         
+        # Variable scaling allows the estimation of scaled costates
+        if action == 'A_gaussian_adjoint':
+            if adj_var_scaling is not None:
+                assert len(adj_var_scaling) == self.D/2, "adj_var_scaling should be"\
+                  " np array of length D/2"
+                var_scaling = np.hstack((np.ones(self.D/2), adj_var_scaling))
+                self.adj_var_scaling = np.tile(var_scaling, self.N_model)
+            else:
+                self.adj_var_scaling = np.ones(self.N_model*self.D)
+
+
         # Reshape RM and RF so that they span the whole time series, if they
         # are passed in as vectors or matrices. This is done because in the
         # action evaluation, it is more efficient to let numpy handle

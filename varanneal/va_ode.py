@@ -696,8 +696,8 @@ class Annealer(ADmin):
         # Fix momenta at endpoints to zero
         if action == 'A_gaussian_adjoint':
            for i in xrange(self.D/2):
-               self.bounds[self.D/2 + i] = [0, 0]
-               self.bounds[len(self.bounds) - 1 -  i] = [0, 0]
+               self.bounds[self.D/2 + i] = [0., 0.]
+               self.bounds[len(self.bounds) - 1 -  i] = [0., 0.]
      
         # Aggregate parameters: initial values, measured indices, and bounds, for
         # both static (Pfix) and time-dependent (Pdyn) parameters
